@@ -5,7 +5,7 @@ Requires at least: 3.2.1
 Tested up to: 3.3.1
 Stable tag: 1.0
 
-Security Tools to help users management: stop brute force, password policy, password reset, password history.
+Security Tools for user management: stop brute force, password policy, password reset, password history.
 
 == Description ==
 
