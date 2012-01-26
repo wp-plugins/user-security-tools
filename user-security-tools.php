@@ -2,8 +2,8 @@
 /*
 Plugin Name: User Security Tools
 Plugin URI: http://oerick.com/user-security-tools
-Description: Some tools to help security admin tasks like: Reset Passwords, Password Policy, BruteForce Locker, and more.
-Version: 1.0b
+Description: Security Tools for user management: stop brute force, password policy, password reset, password history.
+Version: 1.0
 Author: Erick Belluci Tedeschi
 Author URI: http://oerick.com
 License: GPL2
@@ -85,14 +85,16 @@ class UserSecurityTools
         $settings = get_site_option('ust_settings', array());
 
         if (count($settings) === 0) {
-            add_action('network_admin_notices', function() {
-                echo "<div id='ust_notice' class='error'>User Security Tools: Plugin settings is not acessible, try to deactivate and activate again.</div>\r\n";
-            });
+            add_action('network_admin_notices', array(&$this, 'networkAdminNotice'));
         }
 
         $this->settings['sust_max_login_attempts'] = get_site_option('sust_max_login_attempts', 5);
         $this->settings['sust_login_grace_time'] = get_site_option('sust_login_grace_time', 3); 
         $this->settings = array_merge($this->settings, $settings);
+    }
+
+    public function networkAdminNotice() {
+        echo "<div id='ust_notice' class='error'>User Security Tools: Plugin settings is not acessible, try to deactivate and activate again.</div>\r\n";
     }
 
     /**

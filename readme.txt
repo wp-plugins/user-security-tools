@@ -20,6 +20,8 @@ will be configurable).
 *   User Management: the network admin also can lock, unlock and reset user's password manually
 (in case of password reset, the user receives a new activation key and no data is lost).
 
+Obs.: This plugin is only for network/multisite installation
+
 == Installation ==
 
 1. Extract the zip file and upload all files into your plugins directory, making sure to put the files in their own unique folder. 
