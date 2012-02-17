@@ -3,7 +3,7 @@
 Plugin Name: User Security Tools
 Plugin URI: http://oerick.com/user-security-tools
 Description: Security Tools for user management: stop brute force, password policy, password reset, password history.
-Version: 1.0
+Version: 1.1
 Author: Erick Belluci Tedeschi
 Author URI: http://oerick.com
 License: GPL2
@@ -31,10 +31,6 @@ if (!function_exists('add_action')) {
     echo "Ma oeeeee";
     exit();
 }
-// This plugin works (actually) only in network installation
-if ( ! is_multisite() ) {
-    wp_die( __( 'Multisite support is not enabled.' ) );
-}
 
 class UserSecurityTools
 {
@@ -57,8 +53,11 @@ class UserSecurityTools
         add_action('init', array(&$this, 'init'));
 
         // Add Network Admin Menu to manage users of all blogs
-        add_action('network_admin_menu', array(&$this, 'networkAdminMenu'), 10, 0);
-        // Todo: add single site users admin menu
+        if (is_multisite() && is_network_admin()) {
+            add_action('network_admin_menu', array(&$this, 'adminMenu'), 10, 0);
+        } else {
+            add_action('admin_menu', array(&$this, 'adminMenu'), 10, 0);
+        }
 
         // Custom fields in settings
         add_filter('wpmu_options', array(&$this, 'wpmuOptions'));
@@ -76,21 +75,30 @@ class UserSecurityTools
 
         // Hooks for add/del metas when add/delete user
         add_action('wpmu_new_user', array(&$this, 'addUserDefaultMeta'));
+        add_action('user_register', array(&$this, 'addUserDefaultMeta'));
         add_action('wpmu_delete_user', array(&$this, 'delUserDefaultMeta'));
 
         add_action('password_reset', array(&$this, 'passwordReset'), 10, 2);
     }
 
     public function init() {
-        $settings = get_site_option('ust_settings', array());
-
+        if (is_multisite()) {
+            $settings = get_site_option('ust_settings', array());
+        } else {
+            $settings = get_site_option('ust_settings', array());
+        }
         if (count($settings) === 0) {
             add_action('network_admin_notices', array(&$this, 'networkAdminNotice'));
         }
 
-        $this->settings['sust_max_login_attempts'] = get_site_option('sust_max_login_attempts', 5);
-        $this->settings['sust_login_grace_time'] = get_site_option('sust_login_grace_time', 3); 
         $this->settings = array_merge($this->settings, $settings);
+        if (is_multisite()) {
+            $this->settings['sust_max_login_attempts'] = get_site_option('sust_max_login_attempts', 5);
+            $this->settings['sust_login_grace_time'] = get_site_option('sust_login_grace_time', 3); 
+        } else {
+            $this->settings['sust_max_login_attempts'] = get_option('sust_max_login_attempts', 5);
+            $this->settings['sust_login_grace_time'] = get_option('sust_login_grace_time', 3); 
+        }
     }
 
     public function networkAdminNotice() {
@@ -188,7 +196,7 @@ class UserSecurityTools
     public function wpmuOptions() {
 ?>
 <hr />
-<h3>User Security Tools - Network Settings</h3>
+<h3>User Security Tools - Settings</h3>
 <table id="sust_options" class="form-table">
     <tr valign="top">
         <th scope="row">Password Strength</th>
@@ -219,18 +227,31 @@ class UserSecurityTools
     }
 
     public function updateWpmuOptions() {
-        if ( ! current_user_can( 'manage_network_users' ) ) {
+        if ( !current_user_can('manage_options') ) {
             wp_die( __( 'You do not have permission to access this page.' ) );
         }
+        $errors = array();
         if (isset($_POST['sust_max_login_attempts']) &&
             ($_POST['sust_max_login_attempts'] >= 0) &&
             ($_POST['sust_max_login_attempts'] <= 20) ) {
-            update_site_option('sust_max_login_attempts', (int)$_POST['sust_max_login_attempts']);
+            if (is_multisite()) {
+                update_site_option('sust_max_login_attempts', (int)$_POST['sust_max_login_attempts']);
+            } else {
+                update_option('sust_max_login_attempts', (int)$_POST['sust_max_login_attempts']);
+            }
+        } else {
+            $errors[] = 'Max login attempts must be between 0 and 20';
         }
         if (isset($_POST['sust_login_grace_time']) &&
             ($_POST['sust_login_grace_time'] >= 0) &&
             ($_POST['sust_login_grace_time'] <= 1440) ) { // 1440 min = 24 hours
-            update_site_option('sust_login_grace_time', (int)$_POST['sust_login_grace_time']);
+            if (is_multisite()) {
+                update_site_option('sust_login_grace_time', (int)$_POST['sust_login_grace_time']);
+            } else {
+                update_option('sust_login_grace_time', (int)$_POST['sust_login_grace_time']);
+            }
+        } else {
+            $errors[] = 'The minutes of Login Grace Time must be a value between 0 (minutes) and 1440 (minutes = 24hours)';
         }
 
         if (isset($_POST['ust_password_minchars']) &&
@@ -239,6 +260,7 @@ class UserSecurityTools
             $password_minchars = (int)$_POST['ust_password_minchars'];
         } else {
             $password_minchars = $this->settings['password_minchars'];
+            $errors[] = 'The value of Password Min Chars must be between 6 and 100';
         }
         if (isset($_POST['ust_password_maxchars']) &&
             ($_POST['ust_password_maxchars'] >= 6) &&
@@ -246,6 +268,7 @@ class UserSecurityTools
             $password_maxchars = (int)$_POST['ust_password_maxchars'];
         } else {
             $password_maxchars = $this->settings['password_maxchars'];
+            $errors[] = 'The value of Password Max Chars must be between 6 and 100';
         }
 
         // ensure that the maxchars is greater than minchars
@@ -261,33 +284,74 @@ class UserSecurityTools
             $password_strength = $this->settings['password_strength'];
         }
 
-        update_site_option('ust_settings', array(
-            'password_minchars' => $password_minchars,
-            'password_maxchars' => $password_maxchars,
-            'password_strength' => $password_strength
-        ));
+        if (is_multisite()) {
+            update_site_option('ust_settings', array(
+                'password_minchars' => $password_minchars,
+                'password_maxchars' => $password_maxchars,
+                'password_strength' => $password_strength
+            ));
+        } else {
+            update_option('ust_settings', array(
+                'password_minchars' => $password_minchars,
+                'password_maxchars' => $password_maxchars,
+                'password_strength' => $password_strength
+            ));
+        }
+
+        return $errors;
     }
 
-    public function networkAdminMenu() {
-        add_submenu_page('users.php', 'User Security Tools', 'User Security Tools', 'manage_network_users', 'user-security-tools', array(&$this, 'networkAdminPage'));
+    public function adminMenu() {
+        if (is_multisite() && is_network_admin()) { // Multisite in network admin screen
+            add_submenu_page('users.php', 'User Security Tools', 'User Security Tools', 'manage_network_users', 'user-security-tools', array(&$this, 'networkAdminPage'));
+        } elseif (is_multisite()) { // Multisite in specific site admin screen
+            // I think add_users is the capability that an admin needs to 
+            // lock, unlock and reset users passowrd
+            add_submenu_page('users.php', 'User Security Tools', 'User Security Tools', 'add_users', 'user-security-tools', array(&$this, 'networkAdminPage'));
+        } else {
+            add_submenu_page('users.php', 'User Security Tools', 'User Security Tools', 'add_users', 'user-security-tools', array(&$this, 'networkAdminPage'));
+            add_submenu_page('options-general.php', 'User Security Tools', 'User Security Tools', 'manage_options', 'user-security-tools-settings', array($this, 'settingsPage'));
+        }
+    }
+
+    public function settingsPage() {
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_die( __( 'Cheatin&#8217; uh?' ) );
+        }
+
+        if (isset($_POST['_wpnonce']) && isset($_POST['submit'])) {
+            $result = $this->updateWpmuOptions();
+            if (count($result) > 0) {
+                echo "<div class='error'>\r\n";
+                echo implode("<br />\r\n", $result);
+                echo "</div>\r\n";
+            }
+        }
+        echo "<form method='post' action=''>\r\n";
+        wp_nonce_field('form-settings');
+        // retrieve from database new settings stored
+        $this->init();
+        $this->wpmuOptions();
+        submit_button('Save Changes');
+        echo "</form>\r\n";
     }
 
     public function networkAdminPage() {
         global $wpdbi, $current_site;
-
-        if ( ! current_user_can( 'manage_network_users' ) ) {
+        if (!current_user_can('add_users')) {
             wp_die( __( 'You do not have permission to access this page.' ) );
         }
 
         require_once "list-ms-user-table.php"; 
         $super_admins = get_super_admins();
         $usersListTable = new User_List_Table();
-        $usersListTable->prepare_items();
         $showListTable = false;
 
+        // All bulk actions and row actions are in this switch
         switch ($usersListTable->current_action()) {
             case 'dounlock':
-                if (!wp_verify_nonce($_POST['_wpnonce'], 'form-unlock')) {
+                $nonce_form_unlock = (isset($_POST['_wpnonce'])) ? $_POST['_wpnonce'] : null;
+                if (!wp_verify_nonce($nonce_form_unlock, 'form-unlock')) { //bulk-users
                     wp_die('Nonce verification has been failed');
                 }
                 if (isset($_POST['userunlock']) && is_array($_POST['userunlock'])) {
@@ -303,6 +367,12 @@ class UserSecurityTools
                     echo "<ul>\r\n";
                     foreach ($userunlock as $user) {
                         $user = get_user_by('id', intval($user));
+                        if (!$user) continue;
+                        // Ensure that the user of the action is really member 
+                        // of the blog that the operation is been happening
+                        if (is_multisite() && !is_network_admin()) {
+                            if (!is_user_member_of_blog($user->ID)) continue;
+                        }
                         $this->unlockUser($user->ID);
                         echo "\t<li>User " . $user->ID . ": " . $user->user_nicename . " was unlocked</li>\r\n";
                     }
@@ -313,13 +383,22 @@ class UserSecurityTools
                 break; // end dounlock
             case 'unlock':
                 if (isset($_GET['user_id']) && isset($_GET['_wpnonce'])) {
-                    $nonce = $_REQUEST['_wpnonce'];
+                    $nonce = isset($_GET['_wpnonce']) ? $_GET['_wpnonce'] : null;
                     if (!wp_verify_nonce($nonce, 'sust_listact_nonce')) {
                         wp_die('Nonce verification has been failed');
                     }
-                    $user_id = (int)$_GET['user_id'];
-                    $this->unlockUser($user_id);
-                    $user = get_user_by('ID', $user_id);
+                    $user_id = intval($_GET['user_id']);
+                    // checks if the user exists
+                    if (get_user_by('id', $user_id)) {
+                        // Ensure that the user of the action is really member 
+                        // of the blog that the operation is been happening
+                        if (is_multisite() && !is_network_admin()) {
+                            if (!is_user_member_of_blog($user_id)) {
+                                wp_die( __( 'Cheatin&#8217; uh?' ) );
+                            }
+                        }
+                        $this->unlockUser($user_id);
+                    }
                     $showListTable = true;
                 }
                 if (isset($_POST['user']) && is_array($_POST['user'])) {
@@ -330,13 +409,13 @@ class UserSecurityTools
                         <p>Do you want to unlock users below?</p>
                         <form action="<?php echo sprintf('?page=%s&action=%s',esc_attr($_REQUEST['page']),'dounlock'); ?>" method="post">
                             <input type="hidden" name="page" value="<?php echo esc_attr($_REQUEST['page']); ?>" />
-
                             <?php wp_nonce_field('form-unlock'); ?>
 <fieldset>
 <ul>
 <?php
                     foreach ($_POST['user'] as $user) {
-                        $user = get_user_by('id', (int)$user);
+                        $user = get_user_by('id', intval($user));
+                        if (!$user) continue;
                         echo "<li><strong>" . $user->ID . "</strong>: " . $user->user_login . "<input type='hidden' name='userunlock[]' value='" . $user->ID . "' /></li>\r\n";
                     }
 ?>
@@ -350,7 +429,8 @@ class UserSecurityTools
                 }
                 break; // end unlock
             case 'dolock':
-                if (!wp_verify_nonce($_POST['_wpnonce'], 'form-lock')) {
+                $nonce_form_lock = (isset($_POST['_wpnonce'])) ? $_POST['_wpnonce'] : null;
+                if (!wp_verify_nonce($nonce_form_lock, 'form-lock')) {
                     wp_die('Nonce verification has been failed');
                 }
                 if (isset($_POST['userlock']) && is_array($_POST['userlock'])) {
@@ -366,8 +446,20 @@ class UserSecurityTools
                     echo "<ul>\r\n";
                     foreach ($userlock as $user) {
                         $user = get_user_by('id', intval($user));
-                        $this->lockUser($user->ID);
-                        echo "\t<li>User " . $user->ID . ": " . $user->user_nicename . " was locked</li>\r\n";
+                        if (!$user) continue;
+                        // Ensure that the user of the action is really member 
+                        // of the blog that the operation is been happening
+                        if (is_multisite() && !is_network_admin()) {
+                            if (!is_user_member_of_blog($user->ID)) continue;
+                        }
+                        if (in_array($user->user_login, $super_admins)) {
+                             echo sprintf("<li>Warning! User cannot be locked. The user %s is a network admnistrator.</li>\r\n", $user->user_login);
+                        } else if ($user->ID == get_current_user()) {
+                             echo sprintf("<li>Warning! Your user cannot be blocked.\r\n");
+                        } else {
+                            $this->lockUser($user->ID);
+                            echo "\t<li>User " . $user->ID . ": " . $user->user_nicename . " was locked</li>\r\n";
+                        }
                     }
                     echo "</ul>\r\n";
                 }
@@ -376,13 +468,28 @@ class UserSecurityTools
                 break; // end dolock
             case 'lock':
                 if (isset($_GET['user_id']) && isset($_GET['_wpnonce'])) {
-                    $nonce = $_REQUEST['_wpnonce'];
+                    $nonce = isset($_GET['_wpnonce']) ? $_GET['_wpnonce'] : null;
                     if (!wp_verify_nonce($nonce, 'sust_listact_nonce')) {
                         wp_die('Nonce verification has been failed');
                     }
-                    $user_id = (int)$_GET['user_id'];
-                    $this->lockUser($user_id);
-                    $user = get_user_by('ID', $user_id);
+                    $user_id = intval($_GET['user_id']);
+                    $user = get_user_by('id', $user_id);
+                    if ($user) {
+                        // Ensure that the user of the action is really member 
+                        // of the blog that the operation is been happening
+                        if (is_multisite() && !is_network_admin()) {
+                            if (!is_user_member_of_blog($user_id)) {
+                                wp_die( __( 'Cheatin&#8217; uh?' ) );
+                            }
+                        }
+                        if (in_array($user->user_login, $super_admins)) {
+                            $footerMessage = sprintf("Warning! User cannot be locked. The user %s is a network admnistrator.\r\n", $user->user_login);
+                        } else if ($user->ID == get_current_user_id()) {
+                            $footerMessage = sprintf("Warning! Your user cannot be blocked.\r\n");
+                        } else {
+                            $this->lockUser($user_id);
+                        }
+                    }
                     $showListTable = true;
                 }
                 if (isset($_POST['user']) && is_array($_POST['user'])) {
@@ -399,12 +506,13 @@ class UserSecurityTools
 <ul>
 <?php
                     foreach ($_POST['user'] as $user) {
-                        $user = get_user_by('id', (int)$user);
-
+                        $user = get_user_by('id', intval($user));
+                        if (!$user) continue;
                         if (in_array($user->user_login, $super_admins)) {
-                             wp_die(sprintf('Warning! User cannot be locked. The user %s is a network admnistrator.', $user->user_login));
+                            echo sprintf("<li>Warning! User cannot be locked. The user %s is a network admnistrator.</li>\r\n", $user->user_login);
+                        } else {
+                            echo "<li><strong>" . $user->ID . "</strong>: " . $user->user_login . "<input type='hidden' name='userlock[]' value='" . $user->ID . "' /></li>\r\n";
                         }
-                        echo "<li><strong>" . $user->ID . "</strong>: " . $user->user_login . "<input type='hidden' name='userlock[]' value='" . $user->ID . "' /></li>\r\n";
                     }
 ?>
 </ul>
@@ -426,10 +534,21 @@ class UserSecurityTools
                     }
                 }
 
+                if (!isset($_GET['user_id']) || !isset($_GET['_wpnonce'])) {
+                    wp_die('Invalid user id');
+                }
+
 		$user_data = get_user_by('id', (int)$_GET['user_id']);
 
                 if ( !$user_data ) {
-                    wp_die('<strong>ERROR</strong>: Invalid user ID.<br><pre>' . var_export($_REQUEST, true) . '</pre>');
+                    wp_die('<strong>ERROR</strong>: Invalid user ID.<br>');
+                }
+                // Ensure that the user of the action is really member 
+                // of the blog that the operation is been happening
+                if (is_multisite() && !is_network_admin()) {
+                    if (!is_user_member_of_blog($user_data->ID)) {
+                        wp_die( __( 'Cheatin&#8217; uh?' ) );
+                    }
                 }
 
                 // redefining user_login ensures we return the right case in the email
@@ -479,8 +598,9 @@ class UserSecurityTools
                     <input type="hidden" name="page" value="<?php echo esc_attr($_REQUEST['page']); ?>" />
                     <?php $usersListTable->search_box('Search Users', 'user'); ?>
                 </form>
-                <form id="movies-filter" method="post">
+                <form id="users-filter" method="post">
                     <input type="hidden" name="page" value="<?php echo esc_attr($_REQUEST['page']); ?>" />
+                    <?php $usersListTable->prepare_items(); ?>
                     <?php $usersListTable->display() ?>
                 </form>
             </div>
@@ -636,13 +756,23 @@ class UserSecurityTools
         foreach ($users as $user) {
             $this->addUserDefaultMeta($user['ID']);
         }
-        add_site_option('sust_max_login_attempts', 5);
-        add_site_option('sust_login_grace_time', 3);
-        add_site_option('ust_settings', array(
-            'password_minchars' => 12,
-            'password_maxchars' => 16,
-            'password_strength' => self::PASSWORD_STRENGTH_MEDIUM
-        ));
+        if (is_multisite()) {
+            add_site_option('sust_max_login_attempts', 5);
+            add_site_option('sust_login_grace_time', 3);
+            add_site_option('ust_settings', array(
+                'password_minchars' => 12,
+                'password_maxchars' => 16,
+                'password_strength' => self::PASSWORD_STRENGTH_MEDIUM
+            ));
+        } else {
+            add_option('sust_max_login_attempts', 5);
+            add_option('sust_login_grace_time', 3);
+            add_option('ust_settings', array(
+                'password_minchars' => 12,
+                'password_maxchars' => 16,
+                'password_strength' => self::PASSWORD_STRENGTH_MEDIUM
+            ));
+        }
     }
 
     /**
@@ -667,9 +797,15 @@ class UserSecurityTools
         foreach ($users as $user) {
             $this->delUserDefaultMeta($user['ID']);
         }
-        delete_site_option('sust_max_login_attempts');
-        delete_site_option('sust_login_grace_time');
-        delete_site_option('ust_settings');
+        if (is_multisite()) {
+            delete_site_option('sust_max_login_attempts');
+            delete_site_option('sust_login_grace_time');
+            delete_site_option('ust_settings');
+        } else {
+            delete_option('sust_max_login_attempts');
+            delete_option('sust_login_grace_time');
+            delete_option('ust_settings');
+        }
     }
 
     /**

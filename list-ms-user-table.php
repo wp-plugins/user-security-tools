@@ -90,17 +90,25 @@ class User_List_Table extends WP_List_Table {
         $nonce = wp_create_nonce('sust_listact_nonce');
         //Build row actions
         if ( get_current_user_id() == $item->ID ) {
-            $edit_link = esc_url( network_admin_url( 'profile.php' ) );
+            if (is_network_admin()) {
+                $edit_link = esc_url( network_admin_url( 'profile.php' ) );
+            } else {
+                $edit_link = esc_url( admin_url( 'profile.php' ) );
+            }
         } else {
-            $edit_link = esc_url( network_admin_url( add_query_arg( 'wp_http_referer', urlencode( stripslashes( $_SERVER['REQUEST_URI'] ) ), 'user-edit.php?user_id=' . $item->ID ) ) );
+            if (is_network_admin()) {
+                $edit_link = esc_url( network_admin_url( add_query_arg( 'wp_http_referer', urlencode( stripslashes( $_SERVER['REQUEST_URI'] ) ), 'user-edit.php?user_id=' . $item->ID ) ) );
+            } else {
+                $edit_link = esc_url( admin_url( add_query_arg( 'wp_http_referer', urlencode( stripslashes( $_SERVER['REQUEST_URI'] ) ), 'user-edit.php?user_id=' . $item->ID ) ) );
+            }
         }
         $paged = (isset($_GET['paged'])) ? "&paged=" . esc_attr($_GET['paged']) : "";
         $page = esc_attr($_REQUEST['page']);
         $actions = array(
-            'unlock'      => sprintf('<a href="?page=%s&action=%s&user_id=%s&_wpnonce=%s%s">unlock</a>',$page,'unlock',$item->ID,$nonce,$paged),
-            'lock'    => sprintf('<a href="?page=%s&action=%s&user_id=%s&_wpnonce=%s%s">lock</a>',$page,'lock',$item->ID,$nonce,$paged),
-            'resetpassword'    => sprintf('<a href="?page=%s&action=%s&user_id=%s&_wpnonce=%s%s">reset</a>',$page,'resetpassword',$item->ID,$nonce,$paged),
-            'edit' => '<a href="' . $edit_link . '">' . __('Edit') . '</a>'
+            'unlock'      => sprintf("<a href=\"?page=%s&action=%s&user_id=%s&_wpnonce=%s%s\">unlock</a>\r\n",$page,'unlock',$item->ID,$nonce,$paged),
+            'lock'    => sprintf("<a href=\"?page=%s&action=%s&user_id=%s&_wpnonce=%s%s\">lock</a>\r\n",$page,'lock',$item->ID,$nonce,$paged),
+            'resetpassword'    => sprintf("<a href=\"?page=%s&action=%s&user_id=%s&_wpnonce=%s%s\">reset</a>\r\n",$page,'resetpassword',$item->ID,$nonce,$paged),
+            'edit' => "<a href=\"{$edit_link}\">" . __('Edit') . "</a>\r\n"
         );
         
         //Return the title contents
@@ -225,12 +233,13 @@ class User_List_Table extends WP_List_Table {
         $current_page = $this->get_pagenum();
 
         $usersearch = isset( $_REQUEST['s'] ) ? $_REQUEST['s'] : '';
+        $blog_id = (is_network_admin()) ? '0' : $GLOBALS['blog_id'];
 
         $args = array(
             'number' => $per_page,
             'offset' => ($current_page - 1) * $per_page,
             'search' => $usersearch,
-            'blog_id' => 0,
+            'blog_id' => $blog_id,
             'fields' => 'all_with_meta'
         );
         if (isset($_REQUEST['orderby'])) {
@@ -250,7 +259,7 @@ class User_List_Table extends WP_List_Table {
             'per_page'    => $per_page                     //WE have to determine how many items to show on a page
         ) );
     }
-    
+
 }
 
 
