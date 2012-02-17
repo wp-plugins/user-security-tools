@@ -1,9 +1,9 @@
 === User Security Tools ===
 Contributors: ericktedeschi
-Tags: security, user, brute force, password, block, unblock
+Tags: security, user, brute force, password, block, unblock, network install
 Requires at least: 3.2.1
 Tested up to: 3.3.1
-Stable tag: 1.0
+Stable tag: 1.1
 
 Security Tools for user management: stop brute force, password policy, password reset, password history.
 
@@ -20,8 +20,6 @@ will be configurable).
 *   User Management: the network admin also can lock, unlock and reset user's password manually
 (in case of password reset, the user receives a new activation key and no data is lost).
 
-Obs.: This plugin is only for network/multisite installation
-
 == Installation ==
 
 1. Extract the zip file and upload all files into your plugins directory, making sure to put the files in their own unique folder. 
@@ -37,3 +35,8 @@ Obs.: This plugin is only for network/multisite installation
 
 = 1.0 =
 * Initial Version 
+
+= 1.1 =
+* Now both single installation mode and network installation mode are supported
+* Security Fixes and Improvements
+
