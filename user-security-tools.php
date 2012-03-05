@@ -3,7 +3,7 @@
 Plugin Name: User Security Tools
 Plugin URI: http://oerick.com/user-security-tools
 Description: Security Tools for user management: stop brute force, password policy, password reset, password history.
-Version: 1.1
+Version: 1.1.1
 Author: Erick Belluci Tedeschi
 Author URI: http://oerick.com
 License: GPL2
@@ -159,7 +159,6 @@ class UserSecurityTools
                 }
                 break;
         }
-
         $user = get_user_by('login', $username);
         if ($user === false) {
             //skip for new users
@@ -719,6 +718,15 @@ class UserSecurityTools
      * @param string $pass Clear text password
      */
     public function passwordReset($user, $pass) {
+        global $error;
+        $this->checkPasswords($user->user_login, $pass, $pass);
+        if (count($this->passwordErrors) > 0) {
+            $error = implode('<br />', $this->passwordErrors);
+            login_header( __( 'Password Reset' ), '<p class="message reset-pass">The password is not according to the password policy <a href="' . esc_url( site_url('wp-login.php?action=resetpass&key=' . urlencode($_GET['key']) . '&login=' . urlencode($_GET['login']) )) . '">Try again</a></p>' );
+            login_footer();
+            exit;
+        }
+
         $this->addPasswordHistory($user->ID, $pass);
         $this->unlockUser($user->ID);
     }

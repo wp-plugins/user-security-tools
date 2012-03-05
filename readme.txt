@@ -1,9 +1,9 @@
 === User Security Tools ===
 Contributors: ericktedeschi
-Tags: security, user, brute force, password, block, unblock, network install
+Tags: security, user, brute force, password, block, unblock, network install, password policy, password history
 Requires at least: 3.2.1
 Tested up to: 3.3.1
-Stable tag: 1.1
+Stable tag: 1.1.1
 
 Security Tools for user management: stop brute force, password policy, password reset, password history.
 
@@ -40,3 +40,5 @@ will be configurable).
 * Now both single installation mode and network installation mode are supported
 * Security Fixes and Improvements
 
+= 1.1.1 =
+* BUG: The password policy is not applied when user's password is reset
