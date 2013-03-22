@@ -3,7 +3,7 @@
 Plugin Name: User Security Tools
 Plugin URI: http://oerick.com/user-security-tools
 Description: Security Tools for user management: stop brute force, password policy, password reset, password history.
-Version: 1.1.1
+Version: 1.1.2
 Author: Erick Belluci Tedeschi
 Author URI: http://oerick.com
 License: GPL2
@@ -589,6 +589,7 @@ class UserSecurityTools
         } // end switch
 
         if ($showListTable) {
+        $usersListTable->prepare_items();
 ?>
             <div class="wrap">
                 <div id="icon-users" class="icon32"><br/></div>
@@ -599,7 +600,6 @@ class UserSecurityTools
                 </form>
                 <form id="users-filter" method="post">
                     <input type="hidden" name="page" value="<?php echo esc_attr($_REQUEST['page']); ?>" />
-                    <?php $usersListTable->prepare_items(); ?>
                     <?php $usersListTable->display() ?>
                 </form>
             </div>
@@ -758,6 +758,13 @@ class UserSecurityTools
      */
     public function pluginActivation() {
         global $wpdb;
+
+        // If is an network installation, the plugin only can be activated from 
+        // Network Admin Screen
+        if (is_multisite() && !is_network_admin()) {
+            die('In Network install, the plugin must be activated from Network Admin Screen');
+        }
+
         // TODO: Adds usermeta for all users
         $users = $wpdb->get_results($wpdb->prepare("SELECT ID FROM {$wpdb->users};"), 'ARRAY_A');
 
@@ -790,7 +797,17 @@ class UserSecurityTools
      */
     public function addUserDefaultMeta($user_id) {
         $user_id = (int)$user_id;
-        add_user_meta($user_id, 'sust_lastpasswords', array(), true);
+
+        // BUG BY: Jason Buscema - Include the password of the new user in 
+        // history
+        
+        $user_data = get_user_by('id', $user_id);
+        $sust_lastpasswords[] = array(
+            'date' => date('Y-m-d H:i:s', time()),
+            'hash' => $user_data->user_pass
+        );
+
+        add_user_meta($user_id, 'sust_lastpasswords', $sust_lastpasswords, true);
         add_user_meta($user_id, 'sust_locked', 0, true);
         add_user_meta($user_id, 'sust_last_login_fail', 0, true);
         add_user_meta($user_id, 'sust_fail_attempts', 0, true);
